@@ -49,6 +49,9 @@ const saveData = () =>
 const processedMessages = new Set();
 setInterval(() => processedMessages.clear(), 60000);
 
+// a set to assure 1 reply per user
+const repliedUsers = new Set();
+
 // helper function to broadcast status updates
 const broadcastStatus = () => {
   io.emit("status_update", {
@@ -124,6 +127,9 @@ function startBot() {
   client.on("message", async (msg) => {
     if (msg.fromMe || msg.from.endsWith("@g.us") || !msg.body) return;
 
+    // check if we already replied to this specific number this session
+    if (repliedUsers.has(msg.from)) return;
+
     const messageId = `${msg.from}_${msg.timestamp}_${msg.body}`;
     if (processedMessages.has(messageId)) return;
     processedMessages.add(messageId);
@@ -131,12 +137,15 @@ function startBot() {
     const text = msg.body.toLowerCase().trim();
     data.stats.received++;
 
-    // This will now always return your new promotional message
+    // always return the only one message we have
     const replyText = getReply(text);
 
     try {
       const chat = await msg.getChat();
       replyQueue.push({ chat, replyText });
+
+      // mark user as replied
+      repliedUsers.add(msg.from);
 
       data.stats.replied++;
       data.messages.push({
@@ -298,6 +307,9 @@ app.post("/api/logout", async (req, res) => {
   try {
     isBotReady = false;
     latestQR = "";
+
+    // clear replied users list
+    repliedUsers.clear();
 
     // clear the message history
     data.messages = [];
